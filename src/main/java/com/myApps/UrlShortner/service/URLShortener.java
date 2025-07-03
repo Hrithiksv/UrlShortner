@@ -18,14 +18,15 @@ public class URLShortener {
 
     private static final String BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     private static final String COUNTER_KEY = "url_counter";
+    private final RedisCounterService redisCounter;
 
-    private final RedisTemplate<String, Long> redisTemplate;
     private final URLRepo urlRepo;
 
     @Autowired
-    public URLShortener(URLRepo urlRepo, RedisTemplate<String, Long> redisTemplate) {
+    public URLShortener(URLRepo urlRepo, RedisTemplate<String, Long> redisTemplate, RedisCounterService redisCounterService) {
         this.urlRepo = urlRepo;
-        this.redisTemplate = redisTemplate;
+
+        this.redisCounter = redisCounterService;
     }
 
     public UrlResponseDto shortenUrl(String url) {
@@ -37,19 +38,31 @@ public class URLShortener {
         }
         // --- THIS IS THE CRITICAL SECTION TO MONITOR ---
         log.info("URL '{}' is new. Attempting to increment Redis counter: {}", url, COUNTER_KEY);
-        Long Key = redisTemplate.opsForValue().increment(COUNTER_KEY);
+        Long Key = redisCounter.generateKey();
 
-        if (Key == null) {
-            log.error("Failed to increment counter in Redis. 'increment' returned null for key '{}'. This should not happen.", COUNTER_KEY);
-            throw new RuntimeException("Failed to increment counter in Redis");
-        }
         // Log the exact value received from Redis
         log.info("Redis counter for '{}' incremented to: {}", COUNTER_KEY, Key);
+
+        String shortCode = encodeToBase62(Key);
+        // Log the generated shortCode
+        log.info("Generated short code '{}' from counter value '{}' for URL '{}'.", shortCode, Key, url);
+
+        // --- END CRITICAL SECTION ---
+
+        UrlRecord urlRecorde = new UrlRecord(null, url, padShortCode(shortCode), null, null, 1L);
+        log.info("Saving new URLRecord: URL='{}', ShortCode='{}'", urlRecorde.getUrl(), urlRecorde.getShortUrl());
+        UrlRecord saved = urlRepo.save(urlRecorde);
+        log.info("URLRecord saved successfully with ID: {}", saved.getId());
+
+        return toDto(saved);
+    }
+
+    private static String encodeToBase62(Long Key) {
         StringBuilder sb = new StringBuilder();
         // The base62 conversion loop:
-        long tempKey =Key;
+        long tempKey = Key;
         if (tempKey == 0) { // Handle the edge case if 0 is ever passed, although with your start, it won't be
-            sb.append(BASE62.charAt(0));
+            throw new RuntimeException("generated Key is : "+tempKey);
         } else {
             while (tempKey > 0) {
                 int rem = (int) (tempKey % 62);
@@ -57,33 +70,22 @@ public class URLShortener {
                 tempKey /= 62;
             }
         }
-        String shortCode = sb.reverse().toString();
-        // Log the generated shortCode
-        log.info("Generated short code '{}' from counter value '{}' for URL '{}'.", shortCode, Key, url);
-
-        // --- END CRITICAL SECTION ---
-
-        UrlRecord record = new UrlRecord(null, url, padShortCode(shortCode), null, null, 1L);
-        log.info("Saving new URLRecord: URL='{}', ShortCode='{}'", record.getUrl(), record.getShortUrl());
-        UrlRecord saved = urlRepo.save(record);
-        log.info("URLRecord saved successfully with ID: {}", saved.getId());
-
-        return toDto(saved);
+        return sb.reverse().toString();
     }
 
     public UrlResponseDto updateUrl(String code, String url) {
-        UrlRecord record = urlRepo.findByshortUrl(code)
+        UrlRecord urlRecorde = urlRepo.findByshortUrl(code)
                 .map(r -> {
                     r.setUrl(url);
-                    r.incrementAccessed(r.getAccessed());
+                    r.incrementAccessed();
                     return urlRepo.save(r);
                 })
                 .orElseThrow(() -> new RuntimeException("ShortCode not found"));
 
-        return toDto(record);
+        return toDto(urlRecorde);
     }
 
-    public void Delete(String code) {
+    public void DeleteUrl(String code) {
         UrlRecord record = urlRepo.findByshortUrl(code)
                 .orElseThrow(() -> new RuntimeException("ShortCode does not exist"));
         urlRepo.delete(record);
@@ -99,6 +101,7 @@ public class URLShortener {
                 .updatedAt(r.getUpdatedAt())
                 .build();
     }
+
     public String padShortCode(String shortCode) {
         int targetLength = 6;
         int paddingLength = targetLength - shortCode.length();
@@ -107,7 +110,7 @@ public class URLShortener {
             return shortCode; // Already 6 or more characters
         }
 
-        // Pad with '0' to the left
-        return "0".repeat(paddingLength) + shortCode;
+        // Pad with '= ' to the left
+        return "=".repeat(paddingLength) + shortCode;
     }
 }

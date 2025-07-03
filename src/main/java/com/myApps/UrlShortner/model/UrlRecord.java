@@ -18,7 +18,7 @@ public class UrlRecord {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long Id;
+    private Long id;
     private String url;
     private String shortUrl;
     @CreatedDate
@@ -27,7 +27,7 @@ public class UrlRecord {
     private Date updatedAt;
     private Long accessed;
 
-    public void incrementAccessed(Long accessed){
+    public void incrementAccessed(){
         this.accessed++;
     }
 }

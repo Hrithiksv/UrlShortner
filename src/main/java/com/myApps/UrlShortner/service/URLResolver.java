@@ -15,19 +15,18 @@ public class URLResolver {
     }
 
     public UrlResponseDto resolve(String code){
-        UrlRecord record = urlRepo.findByshortUrl(code)
+        UrlRecord urlRecorde = urlRepo.findByshortUrl(code)
                 .map(r->{
-                    r.incrementAccessed(r.getAccessed());
+                    r.incrementAccessed();
                     return urlRepo.save(r);
                 })
                 .orElseThrow(() -> new RuntimeException("Url doesn't exist"));
 
         return UrlResponseDto.builder()
-                .Url(record.getUrl())
-                .shortUrl(record.getShortUrl())
-                .updatedAt(record.getUpdatedAt())
-                .createdAt(record.getGeneratedAt())
-                .accessed(record.getAccessed()+1)
+                .shortUrl(urlRecorde.getShortUrl())
+                .updatedAt(urlRecorde.getUpdatedAt())
+                .createdAt(urlRecorde.getGeneratedAt())
+                .accessed(urlRecorde.getAccessed()+1)
                 .build();
     }
 }
