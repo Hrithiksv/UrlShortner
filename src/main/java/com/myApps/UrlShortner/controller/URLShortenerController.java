@@ -22,8 +22,8 @@ public class URLShortenerController {
 
     @PostMapping
     @RateLimiter(name = "urlShortener")
-    public ResponseEntity<UrlResponseDto> createShortUrl(@RequestParam("url") String Url){
-        UrlResponseDto urlResponseDto = urlShortener.shortenUrl(Url);
+    public ResponseEntity<UrlResponseDto> createShortUrl(@RequestParam("url") String url){
+        UrlResponseDto urlResponseDto = urlShortener.shortenUrl(url);
 
         return ResponseEntity.status(201).body(urlResponseDto);
     }
@@ -46,7 +46,7 @@ public class URLShortenerController {
     @DeleteMapping("/{code}")
     @RateLimiter(name = "urlShortener")
     public ResponseEntity<UrlResponseDto> deleteUrl(@PathVariable("code") String code){
-        urlShortener.Delete(code);
+        urlShortener.DeleteUrl(code);
         return ResponseEntity.ok().build();
     }
 }
